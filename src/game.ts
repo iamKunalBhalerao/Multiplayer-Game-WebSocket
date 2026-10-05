@@ -2,6 +2,11 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const wss = new WebSocketServer({ port: 8080 });
 
+const WORLD = {
+  width: 1000,
+  height: 600,
+};
+
 interface Player {
   userId: string;
   socket: WebSocket;
@@ -389,9 +394,18 @@ function updateRoom(room: GameRoom, deltaTime: number) {
 
   for (const player of room.players.values()) {
     if (player.input.up) player.y -= speed * deltaTime;
-    if (player.input.down) player.y += speed * deltaTime;
+
+    if (player.input.down) {
+      player.y += speed * deltaTime;
+      player.y = Math.min(0, Math.min(player.y, WORLD.height));
+    }
+
     if (player.input.left) player.x -= speed * deltaTime;
-    if (player.input.right) player.x += speed * deltaTime;
+
+    if (player.input.right) {
+      player.x += speed * deltaTime;
+      player.x = Math.max(0, Math.min(player.x, WORLD.width));
+    }
   }
 }
 
