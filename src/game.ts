@@ -14,6 +14,9 @@ interface Player {
     right: boolean;
   };
   lastInputSequence: number;
+
+  inputCount: number;
+  lastInputReset: number;
 }
 
 interface GameRoom {
@@ -21,7 +24,13 @@ interface GameRoom {
   players: Map<string, Player>;
 }
 
-const users = new Map<string, WebSocket>();
+interface UserSession {
+  userId: string | null;
+  socket: WebSocket | null;
+  roomId: string | null;
+}
+
+const users = new Map<string, UserSession>();
 const rooms = new Map<string, GameRoom>();
 
 wss.on("connection", (socket) => {
@@ -45,17 +54,45 @@ wss.on("connection", (socket) => {
             return socket.send(
               JSON.stringify({ type: "ERROR", message: "Already identified" }),
             );
-          if (users.has(parsedData.userId))
-            return socket.send(
+
+          const existingUser = users.get(parsedData.userId);
+
+          if (existingUser) {
+            // Reconnecting user
+            if (existingUser.socket !== null)
+              return socket.send(
+                JSON.stringify({
+                  type: "ERROR",
+                  message: "Already identified",
+                }),
+              );
+
+            existingUser.socket = socket;
+            currentUser = parsedData.userId;
+
+            socket.send(
               JSON.stringify({
-                type: "ERROR",
-                message: "User ID already in use",
+                type: "IDENTIFIED",
+                userId: parsedData.userId,
+                reconnect: true,
               }),
             );
-          currentUser = parsedData.userId;
-          users.set(currentUser!, socket);
+
+            return;
+          }
+
+          const session: UserSession = {
+            userId: parsedData.userId,
+            socket,
+            roomId: null,
+          };
+          users.set(currentUser!, session);
           socket.send(
-            JSON.stringify({ type: "IDENTIFIED", userId: currentUser }),
+            JSON.stringify({
+              type: "IDENTIFIED",
+              userId: currentUser,
+              reconnect: false,
+            }),
           );
         }
 
@@ -120,6 +157,16 @@ wss.on("connection", (socket) => {
               }),
             );
 
+          const session = users.get(currentUser);
+
+          if (!session)
+            return socket.send(
+              JSON.stringify({
+                type: "ERROR",
+                message: "Session Not Found!",
+              }),
+            );
+
           const room = rooms.get(roomId);
           if (!room)
             return socket.send(
@@ -141,7 +188,21 @@ wss.on("connection", (socket) => {
               right: false,
             },
             lastInputSequence: 0,
+            inputCount: 0,
+            lastInputReset: Date.now(),
           });
+
+          if (session.roomId) {
+            const oldRoom = rooms.get(session.roomId);
+
+            oldRoom?.players.delete(currentUser);
+
+            if (oldRoom?.players.size === 0) {
+              rooms.delete(session.roomId);
+            }
+          }
+
+          session.roomId = roomId;
 
           room.players.forEach((p) => {
             if (p.socket !== socket && p.socket.readyState === WebSocket.OPEN) {
@@ -165,6 +226,7 @@ wss.on("connection", (socket) => {
         }
 
         if (parsedData.type === "PLAYER_INPUT") {
+          const now = Date.now();
           const { roomId, keys, sequence } = parsedData;
 
           if (!currentUser)
@@ -215,6 +277,26 @@ wss.on("connection", (socket) => {
               }),
             );
 
+          // Rate limiting logic
+          if (now - player.lastInputReset >= 1000) {
+            player.inputCount = 0;
+            player.lastInputReset = now;
+          }
+
+          player.inputCount++;
+
+          if (player.inputCount > 60)
+            return socket.send(
+              JSON.stringify({
+                type: "ERROR",
+                message: "RATE_LIMITED",
+              }),
+            );
+
+          // sequence check
+          if (sequence <= player.lastInputSequence) {
+            return;
+          }
           if (sequence <= player.lastInputSequence) return;
 
           player.lastInputSequence = sequence;
@@ -226,6 +308,13 @@ wss.on("connection", (socket) => {
         );
     } catch (e) {
       socket.send("Received simple string: " + message);
+    }
+  });
+  socket.on("close", () => {
+    if (!currentUser) return;
+    const session = users.get(currentUser);
+    if (session) {
+      session.socket = null;
     }
   });
 });
