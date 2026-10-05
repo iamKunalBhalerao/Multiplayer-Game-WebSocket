@@ -13,6 +13,7 @@ interface Player {
     left: boolean;
     right: boolean;
   };
+  lastInputSequence: number;
 }
 
 interface GameRoom {
@@ -139,6 +140,7 @@ wss.on("connection", (socket) => {
               left: false,
               right: false,
             },
+            lastInputSequence: 0,
           });
 
           room.players.forEach((p) => {
@@ -163,8 +165,7 @@ wss.on("connection", (socket) => {
         }
 
         if (parsedData.type === "PLAYER_INPUT") {
-          const { roomId } = parsedData;
-          const { up, down, left, right } = parsedData.keys;
+          const { roomId, keys, sequence } = parsedData;
 
           if (!currentUser)
             return socket.send(
@@ -200,28 +201,11 @@ wss.on("connection", (socket) => {
               }),
             );
 
-          player.input = { up, down, left, right };
+          if (sequence <= player.lastInputSequence) return;
 
-          // room.players.forEach((p) => {
-          //   if (p.socket !== socket && p.socket.readyState === WebSocket.OPEN) {
-          //     p.socket.send(
-          //       JSON.stringify({
-          //         type: "PLAYER_INPUT",
-          //         userId: currentUser,
-          //         roomId,
-          //         input: { up, down, left, right },
-          //       }),
-          //     );
-          //   }
-          // });
+          player.lastInputSequence = sequence;
+          player.input = keys;
         }
-
-        //
-        //
-        //
-        //
-        //
-        //
       } else
         socket.send(
           "Not received a valid JSON object: " + JSON.stringify(parsedData),
