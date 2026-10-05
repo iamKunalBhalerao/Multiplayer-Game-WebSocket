@@ -216,34 +216,48 @@ wss.on("connection", (socket) => {
   });
 });
 
-const TICK_RATE = 50;
+const TICK_RATE = 1000 / 60;
+let lastTime = Date.now();
 
 setInterval(() => {
+  const now = performance.now();
+  const deltaTime = (now - lastTime) / 1000;
+  lastTime = now;
+
   for (const room of rooms.values()) {
-    updateRoom(room);
+    updateRoom(room, deltaTime);
   }
 }, TICK_RATE);
 
-function updateRoom(room: GameRoom) {
-  for (const player of room.players.values()) {
-    const speed = 5;
+function updateRoom(room: GameRoom, deltaTime: number) {
+  const speed = 250;
 
-    if (player.input.up) player.y -= speed;
-    if (player.input.down) player.y += speed;
-    if (player.input.left) player.x -= speed;
-    if (player.input.right) player.x += speed;
+  for (const player of room.players.values()) {
+    if (player.input.up) player.y -= speed * deltaTime;
+    if (player.input.down) player.y += speed * deltaTime;
+    if (player.input.left) player.x -= speed * deltaTime;
+    if (player.input.right) player.x += speed * deltaTime;
   }
+}
 
-  const state = JSON.stringify({
-    type: "GAME_STATE",
-    players: [...room.players.values()].map((player) => ({
-      id: player.userId,
-      x: player.x,
-      y: player.y,
-    })),
-  });
+setInterval(() => {
+  for (const room of rooms.values()) {
+    broadcastGameState(room);
+  }
+}, 50);
 
+function broadcastGameState(room: GameRoom) {
   for (const player of room.players.values()) {
-    player.socket.send(state);
+    player.socket.send(
+      JSON.stringify({
+        type: "GAME_STATE",
+        lastProcessedInput: player.lastInputSequence,
+        players: [...room.players.values()].map((player) => ({
+          id: player.userId,
+          x: player.x,
+          y: player.y,
+        })),
+      }),
+    );
   }
 }
