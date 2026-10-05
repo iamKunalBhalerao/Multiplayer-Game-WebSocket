@@ -183,6 +183,20 @@ wss.on("connection", (socket) => {
               }),
             );
 
+          if (
+            typeof keys !== "object" ||
+            typeof keys.right !== "boolean" ||
+            typeof keys.left !== "boolean" ||
+            typeof keys.up !== "boolean" ||
+            typeof keys.down !== "boolean"
+          )
+            return socket.send(
+              JSON.stringify({
+                type: "ERROR",
+                message: "INVALID_INPUT",
+              }),
+            );
+
           const room = rooms.get(roomId);
           if (!room)
             return socket.send(
