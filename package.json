@@ -1,0 +1,20 @@
+{
+  "name": "multiplayer-game-websocket",
+  "module": "src/game.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/game.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/dotenv": "^8.2.3",
+    "@types/ws": "^8.18.2"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "ws": "^8.22.0"
+  }
+}
