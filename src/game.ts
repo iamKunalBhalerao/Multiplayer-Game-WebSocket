@@ -76,6 +76,13 @@ wss.on("connection", (socket) => {
             existingUser.socket = socket;
             currentUser = parsedData.userId;
 
+            if (existingUser.roomId) {
+              const room = rooms.get(existingUser.roomId);
+              if (room) {
+                sendGameState(socket, room);
+              }
+            }
+
             socket.send(
               JSON.stringify({
                 type: "IDENTIFIED",
@@ -347,6 +354,25 @@ wss.on("connection", (socket) => {
 
 const TICK_RATE = 1000 / 60;
 let lastTime = Date.now();
+
+function sendGameState(socket: WebSocket, room: GameRoom) {
+  const players = [];
+
+  for (const player of room.players.values()) {
+    players.push({
+      id: player.userId,
+      x: player.x,
+      y: player.y,
+    });
+  }
+
+  socket.send(
+    JSON.stringify({
+      type: "GAME_STATE",
+      players,
+    }),
+  );
+}
 
 setInterval(() => {
   const now = performance.now();
