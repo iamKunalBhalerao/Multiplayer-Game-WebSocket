@@ -28,6 +28,7 @@ interface UserSession {
   userId: string | null;
   socket: WebSocket | null;
   roomId: string | null;
+  disconnectTimer?: NodeJS.Timeout;
 }
 
 const users = new Map<string, UserSession>();
@@ -66,6 +67,11 @@ wss.on("connection", (socket) => {
                   message: "Already identified",
                 }),
               );
+
+            if (existingUser.disconnectTimer) {
+              clearTimeout(existingUser.disconnectTimer);
+              existingUser.disconnectTimer = undefined;
+            }
 
             existingUser.socket = socket;
             currentUser = parsedData.userId;
@@ -313,9 +319,29 @@ wss.on("connection", (socket) => {
   socket.on("close", () => {
     if (!currentUser) return;
     const session = users.get(currentUser);
-    if (session) {
-      session.socket = null;
-    }
+    if (!session) return;
+
+    session.socket = null;
+
+    session.disconnectTimer = setTimeout(() => {
+      const currentSession = users.get(currentUser!);
+
+      // User didn't reconnect
+      if (currentSession?.socket === null) {
+        users.delete(currentUser!);
+
+        // Also remove from room
+        if (currentSession.roomId) {
+          const room = rooms.get(currentSession.roomId);
+
+          room?.players.delete(currentUser!);
+
+          if (room?.players.size === 0) {
+            rooms.delete(currentSession.roomId);
+          }
+        }
+      }
+    }, 30_000);
   });
 });
 
